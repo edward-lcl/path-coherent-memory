@@ -1705,3 +1705,47 @@ retriever and a competent LLM, a free read-free structural prior (token-path)
 contributes hits no iterative loop recovers (3.1% exclusive on public MuSiQue,
 ~29% on personal memory). Path is a necessary, cheap ensemble member — not a weak
 approximation of reading."
+
+---
+
+## Double-disjoint MuSiQue — hypothesis REFUTED, cleaner story (2026-05-30)
+
+`musique_double_disjoint_eval.py` applied BOTH filters to MuSiQue: terminal not
+in dense top-10 AND not in BM25 top-10 from the full question (the true public
+analogue of the Talos hard subset). Hypothesis was that path would rise toward
+co-equal with iterative in this strict regime.
+
+**Result (double-disjoint, n=331, corpus 11,920, k=10):**
+- dense = 0.0% (by construction)
+- path = 18.7%  (NOT risen — basically unchanged from single-disjoint 20.8%)
+- oracle-iter = 66.8%
+- path-exclusive = 2.4%, iter-exclusive = 50.5%, Jaccard 0.24
+- path share of union = 27%
+
+**Hypothesis REFUTED.** Even on the strictly double-disjoint MuSiQue subset, path
+stays junior and iterative dominates. Filtering harder did NOT reproduce the
+Talos co-equality.
+
+**Why — and why this is a CLEANER story, not a weaker one:**
+MuSiQue is *constructed* from Wikipedia with named-entity bridges by design. The
+double-disjoint filter removes lexical/semantic reachability of the TERMINAL from
+the full question, but the BRIDGE is still a named entity — so once iterative
+resolves the bridge, hop-2 is a clean entity lookup that dense handles. No amount
+of filtering creates a CONCEPT bridge in MuSiQue, because the benchmark has none.
+
+**Refined, honest paper claim:**
+1. PUBLIC + reproducible: dense retrieval is orthogonally useless on the
+   embedding-disjoint multi-hop tail (0.0% across single- and double-disjoint,
+   n=159 and n=331). This half stands on data any reviewer can run.
+2. Token-path recovers ~19-21% read-free/LLM-free even there, with a small but
+   nonzero exclusive contribution (2.4-3.1%) the real LLM loop never reaches.
+3. The path/iterative CO-EQUALITY (~38/38, path-exclusive ~29%) is a property of
+   PERSONAL-MEMORY concept bridges (Talos) that engineered entity-bridge
+   benchmarks (MuSiQue/HotpotQA/2Wiki) structurally cannot exhibit. This is the
+   argument FOR studying personal memory as its own regime — not a weakness that
+   it doesn't reproduce on QA benchmarks, but the POINT.
+
+This means the public experiments anchor claims 1-2; claim 3 is explicitly framed
+as personal-memory-specific, with MuSiQue's failure to reproduce it as positive
+evidence that personal memory is a distinct regime. Do NOT overclaim co-equality
+on public data — it does not hold and we now have the experiment proving it doesn't.
