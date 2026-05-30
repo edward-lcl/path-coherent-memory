@@ -19,7 +19,16 @@ ANSWER_KEY_V1 = ROOT / "levi_semantic_chain_answer_key_v1.jsonl"
 CANDIDATES_V1 = ROOT / "levi_semantic_chain_candidates_v1.jsonl"
 DEFAULT_OUT = ROOT / "levi_semantic_chain_omlx_judge_v1.jsonl"
 OMLX_URL = "http://127.0.0.1:8000/v1/chat/completions"
-OMLX_KEY = "babablacksheep"
+import os as _os
+def _load_omlx_key():
+    k = _os.environ.get("OMLX_API_KEY")
+    if k: return k
+    from pathlib import Path as _P
+    f = _P(__file__).resolve().parent / ".omlx_key"
+    if f.exists(): return f.read_text().strip()
+    raise RuntimeError("Set OMLX_API_KEY env var or create .omlx_key (gitignored)")
+
+OMLX_KEY = _load_omlx_key()
 DEFAULT_MODEL = "gemma-4-E4B-it-MLX-4bit"
 LABELS = {"real_semantic", "weak_semantic", "artifact"}
 

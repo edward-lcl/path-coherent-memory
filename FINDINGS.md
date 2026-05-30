@@ -1667,3 +1667,41 @@ memory is the HARD regime and the right place to make the argument.
 
 **Caveat:** oracle-iter = ceiling (uses gold intermediate). A real self-ask/IRCoT
 loop with an LLM would score lower; the public head-to-head still needs that.
+
+---
+
+## Real self-ask iterative baseline — the honest head-to-head (2026-05-30)
+
+`musique_real_iterative_eval.py` replaces the oracle (gold-intermediate) ceiling
+with an HONEST loop on the same MuSiQue disjoint tail (n=159, 8,180-doc corpus):
+hop-1 sub-q -> dense retrieve top-5 -> local LLM (Qwen3-4B-Instruct on oMLX)
+READS docs and PREDICTS the bridge entity -> fill prediction into hop-2 -> retrieve.
+
+**Result (disjoint tail, n=159, k=10):**
+- LLM hop-1 bridge prediction accuracy: 73.6% (imperfect, as expected)
+- path (free, read-free, LLM-free) = 20.8%
+- REAL-iter (actual self-ask) = 47.2%  ← the honest baseline
+- oracle-iter (ceiling) = 62.3%
+- cost of imperfect bridge: 15.1pp below ceiling
+- PATH+REAL-iter union = 50.3%, best-single 47.2%, lift = +3.1pp
+- path exclusive = 3.1%, real-iter exclusive = 29.6%, Jaccard = 0.35
+
+**Why this matters for the paper:**
+The oracle made iterative look unbeatable (62.3%) and path look redundant. With a
+REAL loop, iterative drops to 47.2% — and token-path, at zero LLM cost, both
+(a) recovers 20.8% on its own and (b) finds 3.1% of terminals that the real LLM
+loop NEVER reaches. That 3.1% is the honest, defensible "path is non-redundant"
+claim on public data: a free structural prior catches links an actual reader misses.
+
+The cost framing is now concrete: real-iter = N LLM calls/question (here 1 hop-1
+call, would be more for k>2) and is bottlenecked by 73.6% bridge accuracy; path is
+0 calls, 0 reads, pure corpus topology. On the personal-memory (Talos) concept-
+bridge regime the path contribution is much larger (co-equal ~38%); MuSiQue's
+engineered lexical bridges are the FRIENDLIEST case for iterative, so path's
+residual 3.1pp here is a conservative lower bound on its value.
+
+**Paper-ready claim:** "Even when iterative reading is given a strong dense
+retriever and a competent LLM, a free read-free structural prior (token-path)
+contributes hits no iterative loop recovers (3.1% exclusive on public MuSiQue,
+~29% on personal memory). Path is a necessary, cheap ensemble member — not a weak
+approximation of reading."
