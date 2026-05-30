@@ -36,3 +36,9 @@ levi_semantic_chain_calibration_v1.json
 paper_v2_snapshot_20260528/
 _dedup_backups/
 _dedup_journal.jsonl
+*.npy
+wikipedia_bio_corpus.json
+talos_corpus_notes.json
+talos_clean_results.json
+talos_complementarity_results.json
+musique_disjoint_results.json

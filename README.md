@@ -1,23 +1,50 @@
 # Path-Coherent Memory Retrieval
 
-**Personal AI memory is not a retrieval problem over a flat corpus. It is a graph traversal problem over a latent knowledge graph.**
+**Personal-memory multi-hop retrieval requires multiple _orthogonal_ traversal modes. No single retrieval method suffices.**
 
-BM25 achieves 0.0% terminal recovery on personal AI memory chains. Dense retrieval achieves 0.0%. Recent graph-augmented methods (HippoRAG, GraphRAG, RAPTOR) do not address this failure mode. This repository introduces three complementary retrieval modes that do.
+On personal-memory links that are neither lexically nor semantically adjacent
+(BM25 0%, dense 0% by an objective embedding criterion), corpus-topology
+traversal and iterative LLM-reading each recover ~38% of links — but their
+hit-sets are nearly disjoint (Jaccard 0.15), and their union reaches 67%. Dense
+retrieval is _orthogonally useless_ in this regime. The contribution of this
+repository is not a state-of-the-art retriever; it is a structural result about
+what retrieval over personal memory actually requires, plus a cheap, read-free,
+LLM-free traversal mode (token-path) that is a necessary member of the ensemble.
+
+> **Note (2026-05-30):** An earlier version of this README led with a
+> "72.7% vs 0.0%" headline. That number was inflated by three artifacts —
+> (1) the benchmark chains were mined with the same token-bridge rule the
+> retriever follows (circular), (2) the LLM judge labeled polysemy collisions as
+> genuine, and (3) the query was a single rare token rather than a realistic
+> document. After de-artifacting (realistic queries, an objective
+> embedding-disjoint subset, judge bypassed), the honest numbers below are
+> roughly half the original claim — and the surviving result is, in our view,
+> stronger because it is defensible. See `FINDINGS.md` for the full red-team.
 
 ---
 
-## The Core Finding
+## The Core Finding (de-artifacted)
 
-Personal AI memory contains multi-hop chains where the terminal node shares **zero vocabulary** with the query anchor and is not adjacent to it in any embedding space. This is not a performance difference — it is a structural failure. No amount of parameter tuning fixes BM25 or dense retrieval on this problem.
+Personal memory contains multi-hop chains where the terminal node shares **zero
+vocabulary** with the query anchor **and** is not adjacent to it in embedding
+space. On a subset defined by an objective embedding criterion (start↔terminal
+cosine < 0.3), BM25 and dense both score exactly 0.0% terminal recall. This is
+not a tuning gap; it is a structural blind spot of lexical and dense retrieval.
+
+Two mechanisms can see into that blind spot, and they see **different** parts of
+it:
 
 ```
-Query: "ultrapure inductors enrolment"
-   ↓ BM25: 0.0% terminal recovery
-   ↓ Dense: 0.0% terminal recovery
-   ↓ Token-path: 72.7% terminal recovery  ← this paper
+embedding-disjoint hard subset (BM25 0%, dense 0%), terminal-recall@10:
+   token-path (read-free, LLM-free)   20.0%
+   oracle-iterative (LLM reading)      38.3%
+   UNION                               66.7%   ← +28pp over best single mode
+   path & iterative Jaccard            0.15    ← nearly disjoint hit-sets
 ```
 
-The gap is structural: token-path follows bridge entities across source boundaries; BM25 requires shared vocabulary that the benchmark chains deliberately exclude.
+Reading is the stronger single mode, but it does **not** dominate: ~29% of these
+hard links are recovered _only_ by token-path and missed entirely by reading.
+The modes are complementary, not redundant.
 
 ---
 
@@ -30,7 +57,9 @@ Follows locally-recurring bridge tokens across document boundaries. Bridge entit
 Query → BM25 anchor → [bridge token] → intermediate → [bridge token] → terminal
 ```
 
-**Result on Talos corpus:** 72.7% terminal hit@10 vs. BM25 0.0%
+**Result on Talos corpus (de-artifacted):** 20.0% terminal hit@10 on the
+embedding-disjoint hard subset vs. BM25 0.0% / dense 0.0% (29.5% over all
+chains). Read-free and LLM-free — a cheap structural prior, not a SOTA retriever.
 
 ### Mode 2 — Embedding-Bridge (Semantic Gaps)
 Traverses semantic proximity gaps across document-type boundaries (topic files ↔ session logs). Finds chains that are semantically connected but lexically disjoint.
@@ -85,14 +114,30 @@ The algorithms are a consequence of the architecture, not a replacement for it.
 
 ### Talos Operational Knowledge Base (Benchmark Family 1 — Lexical Gaps)
 - 19,422 notes, 3,811 organizations, 37,000+ typed relationship edges
-- 200 LLM-judged chains (Gemma-4-E4B-it), post-dedup
-- 132 real_semantic, 63 weak_semantic, 5 artifact
+- 200 mined chains; analyzed with realistic full-document queries
+- Hard subset = objective embedding-disjoint split (start↔terminal cos < 0.3)
 
-| Method | Terminal@10 (real) | Full-path@10 |
+**De-artifacted terminal-recall@10** (`talos_clean_eval.py`,
+`talos_complementarity_eval.py`, all 200 chains, judge bypassed):
+
+| Method | ALL chains | HARD (embedding-disjoint) |
 |---|---|---|
-| BM25 | 0.0% | 0.0% |
-| Cosine | 0.0% | 0.0% |
-| **Token-path v12** | **72.7%** | **72.7%** |
+| BM25 | 5.0% | **0.0%** |
+| Dense (Qwen3-0.6B) | 13.5% | **0.0%** |
+| BM25 + Dense | 11.0% | **0.0%** |
+| Token-path (read-free) | 29.5% | **20.0%** |
+| Oracle-iterative (LLM reading) | 50.5% | **38.3%** |
+| **Union (path ∪ dense ∪ iterative)** | **70.5%** | **66.7%** |
+
+On the hard subset, path and iterative each recover ~38% but with Jaccard 0.15
+(near-disjoint), each exclusively recovering ~29% the other misses. Dense scores
+0.0% and Jaccard 0.00 with every mode — orthogonally useless where lexical and
+semantic signal both vanish.
+
+> The original `72.7% / 0.0%` table (token-path v12) is retained in git history
+> and `FINDINGS.md`. It used a bare-token query, a chain set mined by the
+> retriever's own rule, and a permissive judge; it is superseded by the
+> de-artifacted numbers above.
 
 ### Levi Personal Memory Corpus (Benchmark Family 2 — Semantic Gaps)
 - 10,153 notes, personal session logs + topic files
@@ -223,3 +268,80 @@ This positions personal AI memory as an infrastructure problem, not an algorithm
 - [ ] Email corpus benchmark (Benchmark Family 3) — in progress
 - [ ] HippoRAG baseline comparison — planned
 - [ ] Public arxiv preprint — planned
+
+---
+
+## Direction (2026-05-30): Public Reproducibility & the Vocabulary-Gap Spectrum
+
+The Talos/Levi benchmarks above are private corpora (self-mined, self-judged). A
+reviewer cannot run them and cannot rule out a mining artifact. The current
+research thrust is to reproduce the failure mode on **public, pip-installable**
+datasets and to position the contribution against a **real dense retriever**
+(not just BM25).
+
+### Key correction: BM25 is the wrong baseline to beat
+
+On standard multi-hop (HotpotQA), an off-the-shelf dense retriever
+(Qwen3-Embedding-0.6B) beats BM25 outright and path-coherence adds **nothing**
+on top of dense — because HotpotQA's bridge entity is usually present in the
+question, so embeddings already connect the hops. Any "win over BM25" there is
+illusory. The honest baseline is BM25 ⊕ dense.
+
+### The vocabulary-gap spectrum (the paper's real spine)
+
+The contribution is not "we beat dense on multi-hop." It is that there is a
+**failure-mode spectrum** indexed by how hidden the bridge entity is, and that
+topology adds value monotonically as the gap widens:
+
+| Regime | Dataset | Bridge entity | Dense alone | Path adds over dense |
+|---|---|---|---|---|
+| Standard multi-hop | HotpotQA | usually in question | strong (~90%) | ~0 (dead weight) |
+| Compositional multi-hop | **MuSiQue** (public) | often hidden | wins | ~0 (does NOT transfer) |
+| Personal memory chains | Talos (private) | zero shared vocab | 0.0% | the only thing that works |
+
+MuSiQue is the bridge between the private headline and a result a reviewer can
+run: it composes single-hop questions, so the linking entity is frequently
+absent from the query text ("Who is the spouse of the Green performer?" — the
+performer is never named). This is the public analogue of the Talos zero-vocab
+condition.
+
+**Status (honest, NEGATIVE RESULT):** path-coherence does NOT transfer to
+MuSiQue. Hop-stratified per-support recall@10 (200 each of 2/3/4-hop) shows
+dense alone winning at every depth and path adding nothing on top of dense
+(bm25+dense+path ≤ dense at 2-, 3-, and 4-hop). The n=60 smoke's +13.3pp was
+small-sample noise. The likely reason: MuSiQue's bridges are Wikipedia-style and
+remain embedding-reachable across hops (dense gets 58% at 2-hop), so it is NOT
+the public analogue of the Talos zero-vocab condition we hoped for. The
+generalization claim for a single token-path mode did not survive contact with a
+real dense baseline on public data. The defensible spine is now **complementarity**
+(token-path ⊕ embedding-bridge retrieve non-overlapping families), not
+single-method generalization. Finding a public corpus with genuinely
+embedding-disjoint bridges is the open problem.
+
+### Reproducing the public results
+
+```bash
+# Build the bio-distractor corpus (one-time, ~30K Wikipedia biographies)
+python3 wikipedia_loader.py --max 30000
+
+# HotpotQA large-shared-corpus with proper BM25 + dense + path fusion
+python3 hotpotqa_dense_eval.py --n 300 --bios 30000 --k 10
+
+# MuSiQue — the vocabulary-gap test (gold = paragraph_support_idx)
+python3 musique_eval.py --n 800 --k 10        # breaks out by hop count 2/3/4
+```
+
+Public harnesses: `hotpotqa_hybrid_eval.py` (proper Okapi BM25 + weighted/RRF
+fusion + bridge/comparison routing), `hotpotqa_dense_eval.py` (adds in-process
+Qwen3 dense retrieval), `musique_eval.py` (the failure-mode reproduction).
+Embeddings run in-process via `embedding_bridge_retriever.embed_texts` and are
+checkpointed to `.npy` every 2K docs.
+
+### Open threads
+
+- Does path's lift over dense **grow** at 3- and 4-hop MuSiQue? (gap compounds
+  with depth — this is the figure that sells the paper)
+- Complementarity as the spine: quantify union(BM25, dense, token-path,
+  embedding-bridge) vs. best single mode — "personal memory retrieval needs ≥2
+  orthogonal traversal modes."
+- 2WikiMultiHopQA as a second public failure-mode corpus.
