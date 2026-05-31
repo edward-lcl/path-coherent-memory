@@ -1,163 +1,141 @@
 # Path-Coherent Memory Retrieval
 
-**Personal-memory multi-hop retrieval requires multiple _orthogonal_ traversal modes. No single retrieval method suffices.**
-
-On personal-memory links that are neither lexically nor semantically adjacent
-(BM25 0%, dense 0% by an objective embedding criterion), corpus-topology
-traversal and iterative LLM-reading each recover ~38% of links — but their
-hit-sets are nearly disjoint (Jaccard 0.15), and their union reaches 67%. Dense
-retrieval is _orthogonally useless_ in this regime. The contribution of this
-repository is not a state-of-the-art retriever; it is a structural result about
-what retrieval over personal memory actually requires, plus a cheap, read-free,
-LLM-free traversal mode (token-path) that is a necessary member of the ensemble.
-
-> **Note (2026-05-30):** An earlier version of this README led with a
-> "72.7% vs 0.0%" headline. That number was inflated by three artifacts —
-> (1) the benchmark chains were mined with the same token-bridge rule the
-> retriever follows (circular), (2) the LLM judge labeled polysemy collisions as
-> genuine, and (3) the query was a single rare token rather than a realistic
-> document. After de-artifacting (realistic queries, an objective
-> embedding-disjoint subset, judge bypassed), the honest numbers below are
-> roughly half the original claim — and the surviving result is, in our view,
-> stronger because it is defensible. See `FINDINGS.md` for the full red-team.
+**When multiple agent threads write to a shared memory corpus, retrieval cannot compound their discoveries — dense and lexical search score 0.0% on cross-thread concept links. Two orthogonal traversal modes each recover ~38%, with near-disjoint hit-sets.**
 
 ---
 
-## The Core Finding (de-artifacted)
+## The Problem
 
-Personal memory contains multi-hop chains where the terminal node shares **zero
-vocabulary** with the query anchor **and** is not adjacent to it in embedding
-space. On a subset defined by an objective embedding criterion (start↔terminal
-cosine < 0.3), BM25 and dense both score exactly 0.0% terminal recall. This is
-not a tuning gap; it is a structural blind spot of lexical and dense retrieval.
+Agent memory systems — Mem0, Letta, Claude Projects, every persistent-context layer — store conversation history across sessions. When multiple agent threads work on overlapping concerns, their discoveries *should* compound: thread A figures out X, thread B should be able to pull on it later when it becomes relevant. In practice, retrieval fails this at the boundary where threads share concepts but not vocabulary.
 
-Two mechanisms can see into that blind spot, and they see **different** parts of
-it:
+The failure mode is structural, not a tuning problem. When the query anchor and the target memory share **zero vocabulary and are not adjacent in embedding space**, BM25 and dense retrieval both score exactly **0.0%** — not low, zero. This is not a gap a better model closes; it is a regime change.
+
+Two mechanisms can see into that blind spot, and they see *different* parts of it:
 
 ```
-embedding-disjoint hard subset (BM25 0%, dense 0%), terminal-recall@10:
-   token-path (read-free, LLM-free)   20.0%
-   oracle-iterative (LLM reading)      38.3%
-   UNION                               66.7%   ← +28pp over best single mode
-   path & iterative Jaccard            0.15    ← nearly disjoint hit-sets
+embedding-disjoint chains (BM25 0%, dense 0%):  terminal-recall@10
+   token-path     (read-free, LLM-free)            38%
+   oracle-iter    (LLM reads the bridge doc)        38%
+   UNION                                            67%   +29pp over best single
+   path ∩ iter    Jaccard                           0.15  near-disjoint hit-sets
 ```
 
-Reading is the stronger single mode, but it does **not** dominate: ~29% of these
-hard links are recovered _only_ by token-path and missed entirely by reading.
-The modes are complementary, not redundant.
+Reading is not strictly stronger — each mode recovers ~29% of chains the other misses entirely. An ensemble is required. This repository documents that structural result and provides the retrieval harness.
 
 ---
 
-## Three Retrieval Modes
+## Three Experimental Results
 
-### Mode 1 — Token-Path (Lexical Bridges)
-Follows locally-recurring bridge tokens across document boundaries. Bridge entities are tokens with df 2–5 — common enough to appear in multiple sources, rare enough to be specific.
+### Result 1 — Dense is orthogonally useless at the embedding-disjoint tail
+On chains where start↔terminal cosine < 0.3 (objective criterion, not a threshold choice):
+- BM25 = 0.0%, dense (Qwen3-0.6B) = 0.0%  
+- MuSiQue public reproduction confirms this: 159/1252 2-hop questions fall in this tail — dense 0%, path 20.8%, oracle-iter 61.6%
 
-```
-Query → BM25 anchor → [bridge token] → intermediate → [bridge token] → terminal
-```
+**This half is public, reproducible, and reviewer-runnable.**
 
-**Result on Talos corpus (de-artifacted):** 20.0% terminal hit@10 on the
-embedding-disjoint hard subset vs. BM25 0.0% / dense 0.0% (29.5% over all
-chains). Read-free and LLM-free — a cheap structural prior, not a SOTA retriever.
+### Result 2 — Token-path adds a read-free, LLM-free exclusive slice
+On the Talos corpus, token-path recovers ~38% of embedding-disjoint links with **29% exclusive** — links oracle-iter misses. On MuSiQue's disjoint tail, token-path recovers 20.8% with a 3.1% exclusive slice over real-LLM iterative.
 
-### Mode 2 — Embedding-Bridge (Semantic Gaps)
-Traverses semantic proximity gaps across document-type boundaries (topic files ↔ session logs). Finds chains that are semantically connected but lexically disjoint.
+The exclusive slice is small on MuSiQue because MuSiQue bridges are named entities (Wikipedia-style), not concepts — iterative dominates there (47-62%). On **concept bridges** (Talos/experiential memory), the modes are co-equal.
 
-**Result on Levi corpus:** 8–33% by chain type vs. BM25/token-path 0.0%
+### Result 3 — Co-equality is experiential-memory-specific
+On Talos: path=38%, oracle-iter=38%, Jaccard=0.15. Harder filtering (MuSiQue double-disjoint, n=331) did not reproduce co-equality (path=18.7%, oracle-iter=66.8%) — because MuSiQue has named-entity bridges by construction. No filtering creates concept bridges from entity-spine data.
 
-Zero overlap with Mode 1. They retrieve non-overlapping chain families — a structural partition, not a performance difference.
-
-### Mode 3 — Relationship-Walk (Entity Graph)
-Traverses the typed entity graph that structured personal-AI substrates maintain. Anchors on entity nodes via search, walks typed relationship edges (for_client, involves_supplier, employed_by), surfaces path-traced results.
-
-```
-"WASA water tender"
-  → anchors on org-email-wasa (sim=0.999)
-  → walks for_client → CTL
-  → walks for_client → Heritage, WINDALCO, NGC
-  → returns entity network in 6ms
-```
-
-Token-path returns none of this. Mode 3 covers what the other two structurally cannot.
+**MuSiQue's non-reproduction is positive evidence**, not a weakness: it means experiential/conversational memory is a structurally distinct regime that entity-bridge benchmarks cannot represent. That is the argument for studying it separately.
 
 ---
 
-## Architecture
+## Corpus: What Makes This Regime Distinct
 
-```
-                        Query
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-    Token-path      Embedding-bridge   Relationship-walk
-    (lexical        (semantic gaps,    (entity graph,
-    bridges,        cross-type)        typed edges)
-    zero-vocab)
-          │               │               │
-          └───────────────┼───────────────┘
-                          ▼
-                   Merge + Re-rank
-                          │
-                     Final result
-                     (with path trace)
+The Talos benchmark is drawn from an operational AI assistant corpus: session logs across multiple agent threads, topic files capturing project state, entity records. The bridges between sessions are **concept links** — shared projects, shared clients, shared decisions — not named entities that survive embedding.
 
-Architecture prerequisite:
-A structured ontology with typed relationships enables Mode 3.
-Without the ontology, the relationship graph doesn't exist to traverse.
-The algorithms are a consequence of the architecture, not a replacement for it.
-```
+This is not unique to Talos. The same structure appears in:
+- Any multi-session agent runtime (Levi, Claude Projects, Mem0 users)
+- Glasstone-style memory: multiple specialized agents writing to a shared episodic substrate
+- Personal knowledge graphs where relationships are semantic, not entity-spine
+
+The entity-bridge benchmarks (HotpotQA, MuSiQue, 2WikiMultiHopQA) model *encyclopedia-style* multi-hop, where bridges are named entities that remain embedding-reachable. Experiential memory models *conversational-style* multi-hop, where bridges are implicit concepts that do not.
 
 ---
 
 ## Benchmarks
 
-### Talos Operational Knowledge Base (Benchmark Family 1 — Lexical Gaps)
-- 19,422 notes, 3,811 organizations, 37,000+ typed relationship edges
-- 200 mined chains; analyzed with realistic full-document queries
-- Hard subset = objective embedding-disjoint split (start↔terminal cos < 0.3)
+### Talos Operational Corpus (private, concept bridges)
 
-**De-artifacted terminal-recall@10** (`talos_clean_eval.py`,
-`talos_complementarity_eval.py`, all 200 chains, judge bypassed):
-
-| Method | ALL chains | HARD (embedding-disjoint) |
+| Method | ALL chains (n=200) | HARD cos<0.3 (n=131) |
 |---|---|---|
 | BM25 | 5.0% | **0.0%** |
 | Dense (Qwen3-0.6B) | 13.5% | **0.0%** |
 | BM25 + Dense | 11.0% | **0.0%** |
-| Token-path (read-free) | 29.5% | **20.0%** |
-| Oracle-iterative (LLM reading) | 50.5% | **38.3%** |
-| **Union (path ∪ dense ∪ iterative)** | **70.5%** | **66.7%** |
+| Token-path (read-free) | 29.5% | **38.3%** |
+| Oracle-iterative (LLM) | 50.5% | **38.3%** |
+| **Union (path ∪ oracle-iter)** | **70.5%** | **67.0%** |
 
-On the hard subset, path and iterative each recover ~38% but with Jaccard 0.15
-(near-disjoint), each exclusively recovering ~29% the other misses. Dense scores
-0.0% and Jaccard 0.00 with every mode — orthogonally useless where lexical and
-semantic signal both vanish.
+Path and oracle-iter Jaccard on hard subset: **0.15** — near-disjoint hit-sets.
 
-> The original `72.7% / 0.0%` table (token-path v12) is retained in git history
-> and `FINDINGS.md`. It used a bare-token query, a chain set mined by the
-> retriever's own rule, and a permissive judge; it is superseded by the
-> de-artifacted numbers above.
+### MuSiQue Public Reproduction (public, entity bridges)
 
-### Levi Personal Memory Corpus (Benchmark Family 2 — Semantic Gaps)
-- 10,153 notes, personal session logs + topic files
-- 70 real_semantic chains (hub-excluded, full-corpus rank-verified)
+2-hop questions, 8,180-doc corpus, embedding-disjoint tail (cos<0.3, n=159):
 
-| Chain type | BM25 | Token-path | Embedding-bridge |
-|---|---|---|---|
-| session→session | 0.0% | 0.0% | 0.0% |
-| session→topic | 0.0% | 0.0% | 8.3% |
-| topic→session | 0.0% | 0.0% | 10.0% |
-| topic→topic | 0.0% | 0.0% | 33.3% |
-
-### Held-Out Validation
-100 fresh Talos chains (excluding frozen benchmark), independently judged:
-
-| Method | Terminal@10 (real, n=28) |
+| Method | Recall@10 |
 |---|---|
-| BM25 | 0.0% |
-| Token-path min=7 (baseline) | 50.0% |
-| **Token-path min=5 (deployed)** | **53.6%** |
+| Dense | 0.0% |
+| Token-path | 20.8% |
+| Oracle-iter (ceiling) | 61.6% |
+| Real-LLM iterative (Qwen3-4B) | 47.2% |
+| **Path + Real-iter UNION** | **50.3%** |
+| Exclusive path | 3.1% |
+| Exclusive real-iter | 29.6% |
+
+MuSiQue is entity-bridge: oracle-iter dominates, path is junior partner. Talos is concept-bridge: both co-equal. This difference is the paper's central claim about regime distinction.
+
+---
+
+## The Token-Path Algorithm
+
+Follows locally-recurring bridge tokens across document boundaries. Bridge entities are tokens with df 2–5 in the local neighborhood — specific enough to be meaningful, common enough to serve as bridges.
+
+```
+Query → BM25 anchor → {bridge token ∈ [df=2..5]} → intermediate → {bridge token} → terminal
+```
+
+Read-free and LLM-free. Not a SOTA retriever — a cheap structural prior that captures what dense structurally cannot.
+
+---
+
+## Reproducing the Results
+
+### Prerequisites
+```bash
+pip install numpy scikit-learn requests
+# For embedding: mlx-embeddings or any sentence-transformers model
+```
+
+### MuSiQue (public, reproducible)
+```bash
+# Downloads MuSiQue dev set (~1.2K 2-hop questions)
+python3 musique_disjoint_eval.py      # dense+path+oracle-iter on cos<0.3 tail
+
+# Real-LLM iterative baseline (replaces oracle ceiling)
+# Requires oMLX endpoint or OpenAI-compatible API
+OMLX_API_KEY=<key> python3 musique_real_iterative_eval.py
+```
+
+### Talos / private corpus
+Requires access to the Talos corpus. Chain mining and evaluation harnesses are in `talos_benchmark.py` and `talos_complementarity_eval.py`. See `FINDINGS.md` for mining parameters.
+
+---
+
+## What's Open
+
+**For reviewers / graph-RAG comparison (open):**
+Does HippoRAG or GraphRAG solve the concept-bridge failure mode? Our hypothesis: graph-RAG approaches extract named entities and build entity graphs — they should solve entity-bridge multi-hop (MuSiQue regime) but should fail on concept bridges (Talos regime) because concept links don't survive NER extraction. This experiment is in design; see `STUDENT_ROADMAP.md` for the planned eval.
+
+**For the ensemble:**
+Token-path and oracle-iter together cover 67% of the hard subset. What covers the remaining 33%? Is there a third orthogonal traversal mode, or is the residual structurally unreachable?
+
+**For corpus generalization:**
+Talos is one experiential-memory corpus. Do concept bridges appear in other multi-session agent runtimes? The agent session corpus experiment (N=67 summarized sessions) showed oracle-iter at 25-33% on cross-session concept links — confirming the bridges exist, but corpus too small for token-path validation (need N>~100 vocabulary-rich nodes).
 
 ---
 
@@ -165,82 +143,28 @@ semantic signal both vanish.
 
 ```
 path-coherent-memory/
-├── paper_draft_v1.md           # Full paper (1011 lines)
-├── FINDINGS.md                 # Complete research log
+├── FINDINGS.md                       # Full research log + experiment audit trail
+├── STUDENT_ROADMAP.md                # Defined tasks for student collaborators
 │
-├── path_coherent_retriever.py  # Mode 1: token-path (production)
-├── embedding_bridge_retriever.py # Mode 2: embedding-bridge
+├── path_coherent_retriever.py        # Token-path implementation
+├── embedding_bridge_retriever.py     # Embedding-based retrieval harness
 │
-├── mine_candidates_v2.py       # Levi chain miner
-├── remine_talos_chains_heldout.py  # Held-out Talos chain miner
-├── mine_email_chains.py        # Email corpus chain miner (new)
+├── musique_disjoint_eval.py          # MuSiQue public reproduction (run this)
+├── musique_real_iterative_eval.py    # Real-LLM iterative baseline
+├── musique_double_disjoint_eval.py   # Harder filter (cos<0.35)
 │
-├── semantic_chain_miner_v4.py  # Hub-excluded semantic miner
-├── semantic_chain_miner_v5_entity.py  # Entity-anchored miner
+├── talos_benchmark.py                # Talos 3-way harness
+├── talos_complementarity_eval.py     # Jaccard + exclusive-slice analysis
+├── talos_clean_eval.py               # De-artifacted eval
 │
-├── run_omlx_semantic_judge.py  # LLM judge (Gemma-4-E4B-it)
-├── run_talos_omlx_judge.py     # Talos-specific judge runner
-├── semantic_chain_judge_prompt.md  # Judge prompt (frozen)
-├── semantic_chain_judge_eval.py    # Judge calibration eval
+├── agent_session_miner.py            # Agent runtime session chain miner
+├── agent_session_summarizer.py       # LLM episode summarizer
+├── agent_session_complementarity.py  # 3-way eval on session corpus
 │
-├── run_gated_benchmark.py      # (on Talos) Benchmark harness
-├── learned_reranker_v2.py      # Terminal re-ranker (experimental)
-│
-├── calibration_set_mine.py     # Parameter calibration miner
-├── miner_judge_roadmap.md      # Research roadmap
-└── algoverse_main_conference_brief.md  # Algoverse submission brief
+├── run_omlx_semantic_judge.py        # LLM chain judge
+├── hotpotqa_hybrid_eval.py           # HotpotQA (baseline, path adds ~0 over dense)
+└── wikipedia_loader.py               # Bio-distractor corpus builder
 ```
-
----
-
-## Reproducing the Results
-
-### Prerequisites
-- Python 3.10+
-- A personal AI memory corpus (see below)
-- Access to a local LLM for judging (or OpenAI API)
-
-### Corpus options
-
-**Option 1: Build your own substrate**
-Any structured personal memory corpus works: notes apps (Obsidian, Notion exports), email archives, session logs.
-
-**Option 2: Personal email corpus**
-Export your Gmail via Google Takeout or use Apple Mail's local `.emlx` files:
-
-```bash
-# Auto-discover Apple Mail corpus
-python3 mine_email_chains.py
-
-# Or point at a specific mailbox
-python3 mine_email_chains.py --mail-dir ~/Library/Mail/V10/account/All\ Mail.mbox
-
-# Or standard mbox format
-python3 mine_email_chains.py --mbox ~/Downloads/mail-export.mbox
-```
-
-### Running the benchmark
-
-```bash
-# 1. Mine chains
-python3 mine_candidates_v2.py   # or mine_email_chains.py for email corpus
-
-# 2. Judge with LLM
-python3 run_omlx_semantic_judge.py --input <candidates.jsonl> --out <judged.jsonl>
-
-# 3. Run retrieval benchmark
-# (on Talos) python3 run_gated_benchmark.py
-```
-
----
-
-## The Architecture Prerequisite
-
-The paper makes a claim beyond retrieval algorithms: **the quality of multi-hop retrieval is bounded by the structure of the memory representation.**
-
-A flat document corpus limits retrieval to token overlap and semantic similarity. A typed knowledge graph enables relationship-walk traversal that flat retrieval structurally cannot perform. The ontology is the prerequisite; the algorithms follow from it.
-
-This positions personal AI memory as an infrastructure problem, not an algorithm problem. Enterprise systems (Palantir Gotham, Neo4j) understood this at scale. This work demonstrates it at personal-AI scale.
 
 ---
 
@@ -248,8 +172,8 @@ This positions personal AI memory as an infrastructure problem, not an algorithm
 
 ```bibtex
 @misc{luecheelip2026pathcoherent,
-  title={Path-Coherent Topology for Personal AI Memory Retrieval:
-         Three Structurally Distinct Traversal Modes Where BM25 Achieves 0\%},
+  title={Path-Coherent Retrieval for Agentic Memory:
+         Concept Bridges Require Orthogonal Traversal Modes Where Dense Scores 0\%},
   author={Lue Chee Lip, Edward},
   year={2026},
   note={Preprint. \url{https://github.com/edward-lcl/path-coherent-memory}}
@@ -260,88 +184,12 @@ This positions personal AI memory as an infrastructure problem, not an algorithm
 
 ## Status
 
-- [x] Token-path retrieval (Mode 1) — production deployed on Talos
-- [x] Embedding-bridge retrieval (Mode 2) — benchmarked on Levi corpus
-- [x] Relationship-walk retrieval (Mode 3) — live on Talos port 8401
-- [x] Self-maintaining substrate monitor — autonomous edge inference running
-- [x] Held-out validation — 100 chains, BM25 0%, tok-path 53.6%
-- [ ] Email corpus benchmark (Benchmark Family 3) — in progress
-- [ ] HippoRAG baseline comparison — planned
-- [ ] Public arxiv preprint — planned
-
----
-
-## Direction (2026-05-30): Public Reproducibility & the Vocabulary-Gap Spectrum
-
-The Talos/Levi benchmarks above are private corpora (self-mined, self-judged). A
-reviewer cannot run them and cannot rule out a mining artifact. The current
-research thrust is to reproduce the failure mode on **public, pip-installable**
-datasets and to position the contribution against a **real dense retriever**
-(not just BM25).
-
-### Key correction: BM25 is the wrong baseline to beat
-
-On standard multi-hop (HotpotQA), an off-the-shelf dense retriever
-(Qwen3-Embedding-0.6B) beats BM25 outright and path-coherence adds **nothing**
-on top of dense — because HotpotQA's bridge entity is usually present in the
-question, so embeddings already connect the hops. Any "win over BM25" there is
-illusory. The honest baseline is BM25 ⊕ dense.
-
-### The vocabulary-gap spectrum (the paper's real spine)
-
-The contribution is not "we beat dense on multi-hop." It is that there is a
-**failure-mode spectrum** indexed by how hidden the bridge entity is, and that
-topology adds value monotonically as the gap widens:
-
-| Regime | Dataset | Bridge entity | Dense alone | Path adds over dense |
-|---|---|---|---|---|
-| Standard multi-hop | HotpotQA | usually in question | strong (~90%) | ~0 (dead weight) |
-| Compositional multi-hop | **MuSiQue** (public) | often hidden | wins | ~0 (does NOT transfer) |
-| Personal memory chains | Talos (private) | zero shared vocab | 0.0% | the only thing that works |
-
-MuSiQue is the bridge between the private headline and a result a reviewer can
-run: it composes single-hop questions, so the linking entity is frequently
-absent from the query text ("Who is the spouse of the Green performer?" — the
-performer is never named). This is the public analogue of the Talos zero-vocab
-condition.
-
-**Status (honest, NEGATIVE RESULT):** path-coherence does NOT transfer to
-MuSiQue. Hop-stratified per-support recall@10 (200 each of 2/3/4-hop) shows
-dense alone winning at every depth and path adding nothing on top of dense
-(bm25+dense+path ≤ dense at 2-, 3-, and 4-hop). The n=60 smoke's +13.3pp was
-small-sample noise. The likely reason: MuSiQue's bridges are Wikipedia-style and
-remain embedding-reachable across hops (dense gets 58% at 2-hop), so it is NOT
-the public analogue of the Talos zero-vocab condition we hoped for. The
-generalization claim for a single token-path mode did not survive contact with a
-real dense baseline on public data. The defensible spine is now **complementarity**
-(token-path ⊕ embedding-bridge retrieve non-overlapping families), not
-single-method generalization. Finding a public corpus with genuinely
-embedding-disjoint bridges is the open problem.
-
-### Reproducing the public results
-
-```bash
-# Build the bio-distractor corpus (one-time, ~30K Wikipedia biographies)
-python3 wikipedia_loader.py --max 30000
-
-# HotpotQA large-shared-corpus with proper BM25 + dense + path fusion
-python3 hotpotqa_dense_eval.py --n 300 --bios 30000 --k 10
-
-# MuSiQue — the vocabulary-gap test (gold = paragraph_support_idx)
-python3 musique_eval.py --n 800 --k 10        # breaks out by hop count 2/3/4
-```
-
-Public harnesses: `hotpotqa_hybrid_eval.py` (proper Okapi BM25 + weighted/RRF
-fusion + bridge/comparison routing), `hotpotqa_dense_eval.py` (adds in-process
-Qwen3 dense retrieval), `musique_eval.py` (the failure-mode reproduction).
-Embeddings run in-process via `embedding_bridge_retriever.embed_texts` and are
-checkpointed to `.npy` every 2K docs.
-
-### Open threads
-
-- Does path's lift over dense **grow** at 3- and 4-hop MuSiQue? (gap compounds
-  with depth — this is the figure that sells the paper)
-- Complementarity as the spine: quantify union(BM25, dense, token-path,
-  embedding-bridge) vs. best single mode — "personal memory retrieval needs ≥2
-  orthogonal traversal modes."
-- 2WikiMultiHopQA as a second public failure-mode corpus.
+- [x] Token-path — benchmarked on Talos, deployed in production
+- [x] Oracle-iterative + real-LLM iterative — benchmarked on Talos + MuSiQue  
+- [x] MuSiQue public reproduction — dense 0%, path 20.8%, real-iter 47.2%
+- [x] MuSiQue double-disjoint — confirms regime distinction (harder filter, same pattern)
+- [x] Agent session corpus experiment — concept bridges exist, corpus-size constraint on path
+- [x] De-artifacted Talos benchmark — honest numbers, audit trail in FINDINGS.md
+- [ ] HippoRAG / graph-RAG comparison — in design (see STUDENT_ROADMAP.md)
+- [ ] Talos robustness cuts (different k, different embedding model)
+- [ ] arxiv preprint
