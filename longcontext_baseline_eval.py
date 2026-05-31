@@ -36,9 +36,9 @@ from embedding_bridge_retriever import embed_texts
 
 # ── config ──────────────────────────────────────────────────────────────────
 OMLX_URL   = "http://127.0.0.1:8000/v1/chat/completions"
-OMLX_MODEL = "Qwen3-27B"          # long-context capable; swap to any oMLX model
-K_VALUES   = [10, 20, 50]         # candidate set sizes to test
-N_CHAINS   = 131                  # Talos embedding-disjoint subset size
+OMLX_MODEL = "Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit"  # best available on oMLX
+K_VALUES   = [10, 20, 50]         # candidate set sizes (k=10 smoke-runs fast)
+N_CHAINS   = 131                  # full embedding-disjoint subset; set lower for smoke
 TALOS_CHAINS_FILE = RFM / "talos_heldout_judged_v1.jsonl"   # adjust if needed
 OUT_FILE   = RFM / "longcontext_baseline_results.json"
 
@@ -166,11 +166,28 @@ def load_talos_chains() -> list[dict]:
 
 
 def build_corpus_from_chains(chains: list[dict]) -> tuple[list[str], list[str]]:
-    """Build a flat corpus of unique document texts + IDs from chain data."""
+    """Build corpus from ALL chains in the candidates file (cross-chain distractors).
+
+    Using only eval chain docs would make the retrieval trivially easy (small pool).
+    We use all 200 chains' excerpts as the background corpus so dense retrieval
+    must compete realistically — the terminal is buried in 500+ documents.
+    """
     seen, texts, ids = set(), [], []
-    for c in chains:
-        for field in ["query_text", "intermediate_text", "terminal_text"]:
-            txt = c.get(field, "")
+    # Load ALL chains from the candidates file for distractors
+    all_chains_file = RFM / "talos_semantic_chain_candidates_v2.jsonl"
+    source_chains = []
+    if all_chains_file.exists():
+        with open(all_chains_file) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line: continue
+                try: source_chains.append(json.loads(line))
+                except Exception: pass
+    else:
+        source_chains = chains  # fallback
+    for c in source_chains:
+        for field in ["a", "b", "c"]:
+            txt = c.get("excerpts", {}).get(field, "")
             if txt and txt not in seen:
                 seen.add(txt)
                 texts.append(txt)

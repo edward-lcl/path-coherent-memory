@@ -192,3 +192,42 @@ The paper is undeniable when it has:
 - [ ] One-command reproduce: E9
 
 Five checkboxes. Two are Edward-lane. Three are student-lane.
+
+---
+
+## Grok Frontier Analysis — Key Updates (2026-05-30)
+
+### Papers to cite (newly identified)
+
+**Allies:**
+- **NoLiMa (2025)** — long-context models collapse when needle has *no lexical overlap* with query. Directly confirms the concept-bridge failure mode on the reading side. Cite prominently in E1 and E4. This is your strongest external ally.
+- **HippoRAG 2 (ICML 2025, arXiv 2502.14802)** — the authors themselves admit graph-RAG *"drops considerably below standard RAG on basic factual memory."* Cite this against reviewers who claim HippoRAG solves everything. Frame HippoRAG as a *data point in your argument* (it had to construct a graph = evidence for schema-expressivity thesis), not a competitor.
+
+**Threats to neutralize:**
+- **HippoRAG (NeurIPS 2024, arXiv 2405.14831)** — PPR over extracted KG, beats IRCoT 10–30×. Top dismissal risk. Counter: only works on entity-string bridges; concept bridges produce no KG edges.
+- **Mem0g** — Mem0's graph variant adds only ~2% over flat Mem0. Reviewers will cite this against "graphs are necessary." Counter: Mem0g is entity-graph over flat text — same structural limitation, no concept-bridge edges possible.
+- **GraphRAG (Microsoft 2024, arXiv 2404.16130)** — community-detection for global summarization, not session-pair traversal. Different regime.
+
+**Benchmark gap:**
+- **LOCOMO (ACL 2024)** — the multi-session conversational memory benchmark. Reviewers will ask why you didn't run on it. Add to student roadmap as E11. Not fatal but worth addressing.
+
+### Reframes to work into writing
+
+1. **"Eval substrate blind spot"** — every standard benchmark (MuSiQue, HotpotQA, 2Wiki, LOCOMO) uses entity bridges by construction. HippoRAG wins on those because entity strings survive KG extraction. Our MuSiQue non-reproduction is *empirical proof the field's eval suite has a blind spot* — not a weakness. Lead with this in the abstract.
+
+2. **Orthogonality over leaderboard delta** — the field reports deltas; we report set-overlap (Jaccard 0.15, UNION=67% vs best-single=38%). This is a structurally different and harder-to-dismiss claim: modes are orthogonal bases, not a quality continuum.
+
+3. **Impossibility framing (E4)** — "the relation needed to walk the concept bridge does not exist as a retrievable object in a flat store — no retriever over flat text can recover it regardless of model scale." This is what HippoRAG implicitly proved by having to construct a graph. State it explicitly.
+
+### Updated experiment list additions
+
+**E11 — LOCOMO Benchmark (student, medium)**
+Run 3-way (dense/path/oracle-iter) on LOCOMO multi-session eval. Preempts the
+"why not LOCOMO?" reviewer question. Prediction: similar pattern — concept-bridge
+links score ~0% on dense, path and oracle-iter split the recovery.
+
+**E12 — NoLiMa-aligned analysis**
+On the embedding-disjoint Talos subset, verify that query↔terminal lexical
+overlap is zero (consistent with NoLiMa's "no lexical overlap" condition). This
+connects our result to NoLiMa's framework and lets us cite it as corroboration.
+One script, one paragraph in FINDINGS.md. 30 min effort.

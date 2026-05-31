@@ -101,3 +101,31 @@ hypothesis, protocol, and deliverables are fully specified there.** Short versio
   core.
 - "Personal memory" framing is deprecated — use "agentic/conversational memory"
   or "experiential memory" in any writing you do for this project.
+
+---
+
+## Additional Workstreams (added 2026-05-30)
+
+### E. LOCOMO Benchmark  ·  difficulty: medium  ·  owns: §Baselines table
+Reviewers familiar with multi-session memory will ask: "why not LOCOMO?" (Maharana et al., ACL 2024 — the standard multi-session conversational memory benchmark).
+
+- Download LOCOMO dataset, extract multi-session QA pairs
+- Filter to embedding-disjoint subset (same cos<0.3 criterion)
+- Run 3-way: dense / token-path / oracle-iter
+- Report recall@10 alongside Talos and MuSiQue in the main table
+- Prediction: same pattern — concept-bridge links score ~0% on dense; path and oracle-iter recover different slices
+- **Done when:** one LOCOMO row in the main results table + one paragraph in FINDINGS.md
+
+### F. NoLiMa Alignment Check  ·  difficulty: low  ·  owns: 1 paragraph in related work
+NoLiMa (2025) shows long-context models fail when the needle has *zero lexical overlap* with the query — which is our exact concept-bridge condition. Connecting our result to theirs strengthens both the E1 motivation and the related work.
+
+- On the Talos embedding-disjoint subset (n=131): measure query↔terminal BM25 score (should be ~0) and unigram overlap
+- Confirm these chains satisfy NoLiMa's "no lexical overlap" criterion
+- Write one paragraph in FINDINGS.md connecting to NoLiMa
+- **Done when:** a table or stat confirming lexical disjointness + related-work paragraph citing NoLiMa arXiv
+
+### Key papers to read first (all workstreams)
+- HippoRAG (NeurIPS 2024, arXiv 2405.14831) — main threat, understand it well
+- HippoRAG 2 (ICML 2025, arXiv 2502.14802) — their own admission that graph-RAG degrades on factual memory
+- NoLiMa (2025) — your ally; long-context fails on no-lexical-overlap conditions
+- LOCOMO (ACL 2024) — the multi-session benchmark
