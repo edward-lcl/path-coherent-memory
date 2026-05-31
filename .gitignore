@@ -54,3 +54,47 @@ agent_summary_embeddings*.npy
 musique_real_iterative_results.json
 agent_session_results_*.json
 agent_summary_results_*.json
+# logs
+*.log
+# old versioned result snapshots
+v3_benchmark_results.json
+v4_benchmark_*.json
+benchmark_v5_results.json
+rfm_results*.json
+talos_benchmark_results.json
+talos_heldout_benchmark_results.json
+talos_clean_results.json
+talos_complementarity_results.json
+hotpotqa_dense_results.json
+hotpotqa_hybrid_results.json
+hotpotqa_eval_results.json
+hotpotqa_fullwiki_results.json
+hotpotqa_param_sweep_results.json
+musique_results.json
+musique_iterative_results.json
+musique_strat*.json
+calibration_tuning_results.json
+# corpus snapshots (private)
+corpus_*.json
+levi_corpus.json
+talos_corpus_notes.json
+levi_labeled_benchmark_v1.json
+levi_substrate_labels_v1.tsv
+# old candidate/judge chains (private, large)
+levi_semantic_chain_candidates_v*.jsonl
+levi_semantic_chain_omlx_judge_v*.jsonl
+levi_calibration_*.jsonl
+levi_semantic_chain_local_judge_*.jsonl
+levi_semantic_chain_answer_key_v1.jsonl
+levi_semantic_chain_calibration_v1.json
+talos_semantic_chain_candidates_v*.jsonl
+talos_semantic_chain_omlx_judge_v*.jsonl
+talos_heldout_*.jsonl
+# pkl models
+*.pkl
+# partial downloads
+*.partial.npy
+# snapshots/backups
+paper_v2_snapshot_20260528/
+_dedup_backups/
+_dedup_journal.jsonl

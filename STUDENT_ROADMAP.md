@@ -7,14 +7,16 @@ end and your name is on the contribution.
 
 ## The one-paragraph thesis (read this first)
 
-Personal-memory multi-hop retrieval has links that are neither lexically
-(BM25=0%) nor semantically (dense=0%) reachable. We show dense retrieval is
-*orthogonally useless* in this regime, and that recovering these links requires
-**multiple complementary traversal modes** — a free, read-free corpus-topology
-prior (token-path) plus iterative LLM reading. Neither alone suffices; their
-union does. The contribution is a *structural result about what retrieval over
-personal memory requires*, plus a cheap traversal mode that is a necessary
-ensemble member. See `README.md` and `FINDINGS.md` for the evidence.
+Agent memory systems — Mem0, Letta, Claude Projects, any persistent-context
+layer — store conversation history across multiple agent threads. When threads
+work on overlapping concerns, their discoveries *should* compound on retrieval.
+In practice, cross-thread concept links are neither lexically (BM25=0%) nor
+semanticaly (dense=0%) reachable — a structural blind spot, not a tuning gap.
+Recovering these links requires **two complementary traversal modes**: a free,
+read-free token-path prior plus iterative LLM reading. Their hit-sets are
+near-disjoint (Jaccard 0.15); neither alone suffices; their union reaches 67%.
+The contribution is a structural result about what retrieval over agentic/
+conversational memory requires. See `README.md` and `FINDINGS.md` for the evidence.
 
 ## What's already locked (don't redo)
 
@@ -57,12 +59,18 @@ Reviewers will attack the iterative comparison. Make it bulletproof.
 
 ### C. Graph-RAG comparison  ·  difficulty: medium-high  ·  owns: §Related Work table
 The #1 reviewer question is "why doesn't HippoRAG / GraphRAG solve this?"
-- Stand up at least ONE graph-RAG method (HippoRAG is the closest analogue) and
-  run it on the disjoint tail.
-- Report where it lands relative to dense/path/iter. Our hypothesis: it helps but
-  still misses the concept-bridge links, because its graph is entity-centric.
-- **Done when:** one graph-RAG row exists in the main table with a one-paragraph
-  analysis of why it does/doesn't close the gap.
+
+**Read `HIPPOGRAPH_EXPERIMENT_BRIEF.md` first — the experiment design,
+hypothesis, protocol, and deliverables are fully specified there.** Short version:
+- Run HippoRAG on the same 159-chain MuSiQue embedding-disjoint eval we already have
+- Report recall@10 and exclusive Jaccard vs. token-path and real-LLM-iter
+- Our hypothesis: HippoRAG solves entity bridges (MuSiQue) but not concept bridges
+  (Talos) — because concept links don't survive NER extraction
+- **Decision point before starting:** HippoRAG defaults to OpenAI NER (~$5-20
+  for the 8K-doc corpus). Check `HIPPOGRAPH_EXPERIMENT_BRIEF.md` §Decision Point
+  for the local alternative (spaCy + local LLM, no API cost).
+- **Done when:** one HippoRAG row in the main table + one paragraph in FINDINGS.md
+  (Experiment 6) explaining why it does/doesn't close the gap.
 
 ### D. Figures, writing, reproducibility  ·  difficulty: low  ·  owns: §Method figures + repo
 - Turn the complementarity result into a clean Venn / bar figure (path-exclusive,
@@ -91,3 +99,5 @@ The #1 reviewer question is "why doesn't HippoRAG / GraphRAG solve this?"
 - Private corpora (Talos) stay private — they're gitignored. Public work
   (MuSiQue/HotpotQA/2Wiki) is what goes in the repo and the paper's reproducible
   core.
+- "Personal memory" framing is deprecated — use "agentic/conversational memory"
+  or "experiential memory" in any writing you do for this project.
