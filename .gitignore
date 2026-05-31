@@ -44,3 +44,13 @@ talos_complementarity_results.json
 musique_disjoint_results.json
 .omlx_key
 musique_double_disjoint_results.json
+agent_session_nodes.json
+agent_session_chains.jsonl
+agent_session_summaries.json
+agent_session_summaries.progress.json
+agent_session_embeddings*.npy
+agent_summary_chains.jsonl
+agent_summary_embeddings*.npy
+musique_real_iterative_results.json
+agent_session_results_*.json
+agent_summary_results_*.json
